@@ -8,13 +8,13 @@ import (
 )
 
 const (
-	InitMny = 100000
+	InitMny          = 100000
 	DefaultThreadNum = 100
 )
 
 var mutex sync.Mutex
 
-func Simualte() {
+func Simulate(dirName string) {
 	dataCenter := datacenter.GetInstance()
 	var currIndex int
 	currIndex = 0
@@ -24,7 +24,7 @@ func Simualte() {
 	waitGroup.Add(DefaultThreadNum)
 	for i := 0; i < DefaultThreadNum; i++ {
 		channel := make(chan SimulateRst, 10)
-		go simulateGrp(&currIndex, stockList, channel, &waitGroup)
+		go simulateGrp(&currIndex, stockList, channel, &waitGroup, dirName)
 		channelSlice[i] = channel
 	}
 
@@ -32,13 +32,13 @@ func Simualte() {
 	waitGroup.Wait()
 	println("in here!!")
 	finalRst := SimulateRst{
-		winNum: 0,
-		lostNum: 0,
-		maxWinPct: 0,
+		winNum:     0,
+		lostNum:    0,
+		maxWinPct:  0,
 		maxLostPct: 0,
 	}
 	for _, channel := range channelSlice {
-		tempVal := <- channel
+		tempVal := <-channel
 		finalRst.winNum += tempVal.winNum
 		finalRst.lostNum += tempVal.lostNum
 		if finalRst.maxWinPct < tempVal.maxWinPct {
@@ -49,14 +49,13 @@ func Simualte() {
 		}
 	}
 
-	// TODO -- 将最终结果写入到一个文件当中去
 	finalRstString := finalRst.ToString()
-	filePath := file.DefaultPreWorkspace + "\\daySimulate\\sum.txt"
+	filePath := file.DefaultPreWorkspace + "\\" + dirName + "\\sum.txt"
 	_ = ioutil.WriteFile(filePath, []byte(finalRstString), 0777) //如果文件a.txt已经存在那么会忽略权限参数，清空文件内容。文件不存在会创建文件赋予权限
 	println("Calculate finished!!!")
 }
 
-func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitGroup *sync.WaitGroup) {
+func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
 	defer waitGroup.Done()
 	// 最终返回结果
 	simulateRst := SimulateRst{}
@@ -84,11 +83,18 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 
 		// 查询出对应的股票基本信息来
 		dataCenter := datacenter.GetInstance()
-		baseInfos := dataCenter.QueryStockBaseInfo(" ts_code='" + tsCode + "' order by trade_date limit 1000")
+		baseInfos := dataCenter.QueryStockBaseInfo(" ts_code='" + tsCode + "' order by trade_date desc limit 1000")
 		if baseInfos == nil || len(baseInfos) == 0 {
 			continue
 		}
-		retOpeTime := JudgeBuyTime(baseInfos)
+
+		// 对切片进行反序操作
+		for i, j := 0, len(baseInfos)-1; i < j; i, j = i+1, j-1 {
+			baseInfos[i], baseInfos[j] = baseInfos[j], baseInfos[i]
+		}
+		//retOpeTime := DayJudgeBuyTime(baseInfos)
+		//retOpeTime := EMAJudgeBuyTime(baseInfos)
+		retOpeTime := HistoryDownJudge(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
 		for i, info := range retOpeTime {
@@ -160,7 +166,7 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 
 		// 将实时分析结果写入到Excel文件当中去
 		fileName := tsCode + ".xlsx"
-		excelWriter := file.New(fileName, "daySimulate")
+		excelWriter := file.New(fileName, dirName)
 		excelWriter.Write(excelData)
 	}
 	channel <- simulateRst

@@ -30,7 +30,7 @@ func main() {
 	//excelData.SetData("dada", columns2Data)
 	//writer := file.New("first.xlsx", "temp")
 	//writer.Write(excelData)
-	simulation.Simualte()
+	simulation.Simulate("historyDown")
 }
 
 func testArray(array1 [2]int) {
