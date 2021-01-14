@@ -9,7 +9,7 @@ import (
 const (
 	HistoryDownConsiderBuy = 200 // 200天历史低值的话考虑买入
 	DownEmaField           = 4
-	DownEmaSoldDays        = 3 // 当EMA三天下降的时候就卖出好吧
+	DownEmaSoldDays        = 2 // 当EMA三天下降的时候就卖出好吧
 )
 
 // 历史低值验证方法
@@ -58,12 +58,17 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 			continue
 		}
 
+		emaStartIndex := i - DownEmaSoldDays - startIndex
+		if emaStartIndex < 0 {
+			continue
+		}
+
 		hasBuy := false
 		tempOpeInfo := OperateInfo{}
 		if downDaysCount >= HistoryDownConsiderBuy {
 			// 此处意味着前一天的价格已经是HistoryDownConsiderBuy天的最低值了
-			// 判定下是否可以买入，也就是当天的收盘价是否比昨天的收盘价更高
-			if value.PctChg > 0 {
+			// 判定下是否可以买入，也就是当天的收盘价是否比昨天的收盘价更高，同时EMA开始上涨了
+			if value.PctChg > 0 && infos[emaStartIndex].EMA4 > 0 {
 				tempOpeInfo.OpeFlag = BuyFlag
 				tempOpeInfo.OpePercent = 0.3
 				hasBuy = true
@@ -76,10 +81,6 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 			continue
 		}
 		// 根据EMA的值判定下是否需要卖出
-		emaStartIndex := i - DownEmaSoldDays - startIndex
-		if emaStartIndex < 0 {
-			continue
-		}
 		alwaysDown := true
 		if len(infos) == 0 {
 			println("ts code is " + tsCode)

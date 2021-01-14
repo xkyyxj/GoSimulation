@@ -59,11 +59,15 @@ func EMAJudgeBuyTime(baseInfos []results.StockBaseInfo) []OperateInfo {
 			changePct = (baseInfos[i].Close - lastBuyPrice) / lastBuyPrice
 		}
 		tempOpeInfo := OperateInfo{}
-		if upDays >= EMAUpBuyCount {
+		// FIXME -- 做个恶作剧，替换一下
+		if downDays >= EMAUpBuyCount {
 			tempOpeInfo.OpeFlag = BuyFlag
 			tempOpeInfo.OpePercent = 0.2
 			lastBuyPrice = baseInfos[i].Close
-		} else if downDays >= EMADownSoldDays && changePct <= EWADownSoldPct {
+		} else if upDays >= EMADownSoldDays { /// && changePct <= EWADownSoldPct
+			if changePct <= EWADownSoldPct {
+
+			}
 			// 到达了下降天数之后，还必须到达指定的下降百分比
 			tempOpeInfo.OpeFlag = SoldFlag
 			tempOpeInfo.OpePercent = 0.3
