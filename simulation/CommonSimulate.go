@@ -93,8 +93,9 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 			baseInfos[i], baseInfos[j] = baseInfos[j], baseInfos[i]
 		}
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
-		retOpeTime := EMAJudgeBuyTime(baseInfos)
+		//retOpeTime := EMAJudgeBuyTime(baseInfos)
 		//retOpeTime := HistoryDownJudge(baseInfos)
+		retOpeTime := HistoryDownLongJudge(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
 		for i, info := range retOpeTime {

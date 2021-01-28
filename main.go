@@ -30,8 +30,8 @@ func main() {
 	//excelData.SetData("dada", columns2Data)
 	//writer := file.New("first.xlsx", "temp")
 	//writer.Write(excelData)
-	//simulation.Simulate("history_Down0002")
-	simulation.Simulate("ema_simulate_003")
+	simulation.Simulate("long_history_Down0002")
+	//simulation.Simulate("ema_simulate_005")
 	//allSimulate.UpGoSimualte()
 }
 
