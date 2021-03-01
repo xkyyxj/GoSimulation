@@ -3,7 +3,7 @@ package main
 import (
 	_ "database/sql"
 	"stock_simulate/datacenter"
-	"stock_simulate/simulation"
+	"stock_simulate/trackSimulate"
 )
 
 var SingleDataCenter *datacenter.DataCenter
@@ -30,7 +30,15 @@ func main() {
 	//excelData.SetData("dada", columns2Data)
 	//writer := file.New("first.xlsx", "temp")
 	//writer.Write(excelData)
-	simulation.Simulate("long_history_Down0002")
+	//tempDetail := trackSimulate.OperationDetail{}
+	//tempDetail.HasSold = true
+	//var timeIndexBuyInfo []*trackSimulate.OperationDetail
+	//var buyPriceOrderInfo []*trackSimulate.OperationDetail
+	//timeIndexBuyInfo = append(timeIndexBuyInfo, &tempDetail)
+	//buyPriceOrderInfo = append(buyPriceOrderInfo, &tempDetail)
+	//timeIndexBuyInfo[0].HasSold = false
+	//println("has sold is {}", buyPriceOrderInfo[0].HasSold)
+	trackSimulate.Simulate("track_long_time_0000013")
 	//simulation.Simulate("ema_simulate_005")
 	//allSimulate.UpGoSimualte()
 }

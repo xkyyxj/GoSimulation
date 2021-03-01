@@ -1,19 +1,26 @@
-package simulation
+package trackSimulate
 
 import (
 	"io/ioutil"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
+	"stock_simulate/simulation"
 	"sync"
 )
 
 const (
 	InitMny          = 100000
 	DefaultThreadNum = 100
+	NoWinDays        = 10 // 到达指定天数仍然没有盈利，就卖出操作（全仓）
+	TargetWinPct     = 0.15
+	NoWinPct         = 0.03 // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数（TODO）
 )
 
 var mutex sync.Mutex
 
+// 跟踪每一笔交易，决定适当时机做买入卖出操作
+// 1. 当某次买入的票子持有达到NoWinDays天的时候，不管结果如何，都做卖出操作（或者换种策略，持有就持有，当稍微有盈利了之后才卖出呢？）
+// 2. 当某次买入的票子盈利达到了TargetWinPct的时候，我们就做卖出操作（此处可优化，比如让利润奔跑）
 func Simulate(dirName string) {
 	dataCenter := datacenter.GetInstance()
 	var currIndex int
@@ -24,7 +31,7 @@ func Simulate(dirName string) {
 	waitGroup.Add(DefaultThreadNum)
 	for i := 0; i < DefaultThreadNum; i++ {
 		channel := make(chan SimulateRst, 10)
-		go simulateGrp(&currIndex, stockList, channel, &waitGroup, dirName)
+		go singleSimulate(&currIndex, stockList, channel, &waitGroup, dirName)
 		channelSlice[i] = channel
 	}
 
@@ -55,7 +62,7 @@ func Simulate(dirName string) {
 	println("Calculate finished!!!")
 }
 
-func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
+func singleSimulate(index *int, stockList []string, channel chan SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
 	defer waitGroup.Done()
 	// 最终返回结果
 	simulateRst := SimulateRst{}
@@ -81,6 +88,10 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 		*index = *index + 1
 		mutex.Unlock()
 
+		// 记录买入信息
+		var timeIndexBuyInfo []*OperationDetail
+		var buyPriceOrderInfo []*OperationDetail
+
 		// 查询出对应的股票基本信息来
 		dataCenter := datacenter.GetInstance()
 		baseInfos := dataCenter.QueryStockBaseInfo(" ts_code='" + tsCode + "' order by trade_date desc limit 1000")
@@ -95,8 +106,7 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
 		//retOpeTime := HistoryDownJudge(baseInfos)
-		//retOpeTime := HistoryDownLongJudge(baseInfos)
-		retOpeTime := LongEmaSimulate(baseInfos)
+		retOpeTime := simulation.LongEmaSimulate(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
 		for i, info := range retOpeTime {
@@ -125,32 +135,86 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 				tempDetail.LeftMny = holdInfos.LeftMny
 				tempDetail.TotalMny = tempDetail.HoldMny + tempDetail.LeftMny
 				tempDetail.OpeFlag = BuyDisplay
+				tempDetail.TradeIndex = i
 				tempDetail.AddDetailToExcelData(&excelData)
-				lastDetail = tempDetail
-			} else if info.OpeFlag == SoldFlag {
-				tempOpeNum := float64(holdInfos.HoldNum) * tempOpePct
-				// 卖出都是按手为单位(100的整数)
-				realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
-				if realOpeNum == 0 {
-					continue
-				}
-				// 更新持仓信息
-				holdInfos.HoldNum -= realOpeNum
-				holdInfos.LeftMny += float64(realOpeNum) * baseInfos[i].Close
+				timeIndexBuyInfo = append(timeIndexBuyInfo, &tempDetail)
+				buyPriceOrderInfo = append(buyPriceOrderInfo, &tempDetail)
 
-				// 更新操作信息
-				tempDetail.TsCode = tsCode
-				tempDetail.OpeClose = baseInfos[i].Close
-				tempDetail.OpeNum = realOpeNum
-				tempDetail.TradeDate = baseInfos[i].TradeDate
-				tempDetail.HoldNum = holdInfos.HoldNum
-				tempDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
-				tempDetail.LeftMny = holdInfos.LeftMny
-				tempDetail.TotalMny = tempDetail.HoldMny + tempDetail.LeftMny
-				tempDetail.OpeFlag = SoldDisplay
-				tempDetail.AddDetailToExcelData(&excelData)
+				// 针对买入价格做下排序
+				for j := len(buyPriceOrderInfo) - 1; j > 0; j-- {
+					if buyPriceOrderInfo[j].OpeClose > buyPriceOrderInfo[j-1].OpeClose {
+						temp := buyPriceOrderInfo[j]
+						buyPriceOrderInfo[j] = buyPriceOrderInfo[j-1]
+						buyPriceOrderInfo[j-1] = temp
+					} else {
+						break
+					}
+				}
 				lastDetail = tempDetail
 			}
+			tempOpeNum := 0
+			// 检查下是否有过期的买入记录
+			for {
+				if len(timeIndexBuyInfo) <= 0 {
+					break
+				}
+				// 已经卖出的去掉
+				if timeIndexBuyInfo[0].HasSold {
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+					continue
+				}
+				// FIXME -- 此处指定了买入的必须盈利了才能卖出
+				if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > NoWinDays && baseInfos[i].Close > timeIndexBuyInfo[0].OpeClose {
+					tempOpeNum += timeIndexBuyInfo[0].OpeNum
+					timeIndexBuyInfo[0].HasSold = true
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+				} else {
+					break
+				}
+			}
+
+			// 检查下是否有达到盈利标准的股票
+			for k := 0; k < len(buyPriceOrderInfo); k++ {
+				// 已经卖出的去掉
+				if buyPriceOrderInfo[k].HasSold {
+					buyPriceOrderInfo = append(buyPriceOrderInfo[:k], buyPriceOrderInfo[k+1:]...)
+					k--
+					continue
+				}
+
+				// 判定盈利百分比
+				tempWinPct := (baseInfos[i].Close - buyPriceOrderInfo[k].OpeClose) / buyPriceOrderInfo[k].OpeClose
+				// 当模拟程序告诉你说要卖出的时候才卖出呢？
+				// FIXME -- 此处指定了只有当模拟程序发出卖出信号的时候，才能能够卖出（使盈利最大化）
+				if tempWinPct > TargetWinPct && info.OpeFlag == SoldFlag {
+					tempOpeNum += buyPriceOrderInfo[k].OpeNum
+					buyPriceOrderInfo[k].HasSold = true
+					buyPriceOrderInfo = append(buyPriceOrderInfo[:k], buyPriceOrderInfo[k+1:]...)
+					k--
+				}
+			}
+			// 卖出都是按手为单位(100的整数)
+			realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
+			if realOpeNum == 0 {
+				continue
+			}
+			// 更新持仓信息
+			holdInfos.HoldNum -= realOpeNum
+			holdInfos.LeftMny += float64(realOpeNum) * baseInfos[i].Close
+
+			// 更新操作信息
+			soldDetail := OperationDetail{}
+			soldDetail.TsCode = tsCode
+			soldDetail.OpeClose = baseInfos[i].Close
+			soldDetail.OpeNum = realOpeNum
+			soldDetail.TradeDate = baseInfos[i].TradeDate
+			soldDetail.HoldNum = holdInfos.HoldNum
+			soldDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
+			soldDetail.LeftMny = holdInfos.LeftMny
+			soldDetail.TotalMny = soldDetail.HoldMny + soldDetail.LeftMny
+			soldDetail.OpeFlag = SoldDisplay
+			soldDetail.AddDetailToExcelData(&excelData)
+			lastDetail = soldDetail
 		}
 		if lastDetail.TotalMny > InitMny {
 			simulateRst.winNum += 1
