@@ -101,19 +101,22 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 		opePct := 0.4
 		preEmaValue := infos[i].EMA4
 		emaStartIndex := i - startIndex - DownEmaSoldDays
-		for emaStartIndex++; emaStartIndex <= i-startIndex && alwaysDown; emaStartIndex++ {
-			// 如果持续下降或者是加个降低到一定的百分比，那么也卖出
-			downPct := (value.Close - lastBuyPrice) / lastBuyPrice
-			if downPct < DownSoldPct {
-				// FIXME -- 写死一个数值，后续可以修正下\
-				alwaysDown = true
-				opePct = DownPctSoldPct
-				break
-			}
-			if infos[emaStartIndex].EMA4 <= preEmaValue {
-				preEmaValue = infos[emaStartIndex].EMA4
-			} else {
-				alwaysDown = false
+		alwaysDown = emaStartIndex >= 0
+		if emaStartIndex >= 0 {
+			for ; emaStartIndex <= i-startIndex && alwaysDown; emaStartIndex++ {
+				// 如果持续下降或者是加个降低到一定的百分比，那么也卖出
+				downPct := (value.Close - lastBuyPrice) / lastBuyPrice
+				if downPct < DownSoldPct {
+					// FIXME -- 写死一个数值，后续可以修正下\
+					alwaysDown = true
+					opePct = DownPctSoldPct
+					break
+				}
+				if infos[emaStartIndex].EMA4 <= preEmaValue {
+					preEmaValue = infos[emaStartIndex].EMA4
+				} else {
+					alwaysDown = false
+				}
 			}
 		}
 

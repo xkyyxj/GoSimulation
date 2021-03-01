@@ -15,15 +15,15 @@ var DefaultPreWorkspace string
 
 type ExcelWriter struct {
 	FileName string
-	dirName string
-	f *excelize.File
+	dirName  string
+	f        *excelize.File
 }
 
 func New(fileName string, outDirName string) *ExcelWriter {
 	writer := ExcelWriter{
 		FileName: fileName,
-		dirName: outDirName,
-		f: excelize.NewFile(),
+		dirName:  outDirName,
+		f:        excelize.NewFile(),
 	}
 	return &writer
 }
@@ -41,7 +41,7 @@ func (excelWriter *ExcelWriter) Write(data ExcelData) {
 		// 然后开始循环写表体
 		columnData := data.Data[value]
 		for j, tempData := range columnData {
-			name := tempColumnName + strconv.Itoa(j + 2)
+			name := tempColumnName + strconv.Itoa(j+2)
 			_ = f.SetCellValue("Sheet1", name, tempData)
 		}
 	}
@@ -62,20 +62,20 @@ func checkThenCreateDir(dirName string) {
 	// 创建文件夹
 	err = os.Mkdir(dirName, os.ModePerm)
 	if err != nil {
-		panic("创建文件夹失败！！")
+		panic("创建文件夹失败！！" + dirName + " " + err.Error())
 	}
 }
 
 func ConvertIndexToColumn(i int) string {
 	retString := ""
 	for {
-		tempString := string(rune(65 + i % 26))
+		tempString := string(rune(65 + i%26))
 		retString = tempString + retString
 
 		if i <= 25 {
 			break
 		}
-		i = i / 26 - 1
+		i = i/26 - 1
 	}
 	return retString
 }

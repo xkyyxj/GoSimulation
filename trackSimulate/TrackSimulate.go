@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
-	"stock_simulate/simulation"
 	"sync"
 )
 
@@ -105,8 +104,8 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 		}
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
-		//retOpeTime := HistoryDownJudge(baseInfos)
-		retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		retOpeTime := HistoryDownJudge(baseInfos)
+		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
 		for i, info := range retOpeTime {

@@ -38,7 +38,7 @@ func main() {
 	//buyPriceOrderInfo = append(buyPriceOrderInfo, &tempDetail)
 	//timeIndexBuyInfo[0].HasSold = false
 	//println("has sold is {}", buyPriceOrderInfo[0].HasSold)
-	trackSimulate.Simulate("track_long_time_0000013")
+	trackSimulate.Simulate("track_history_down_000001")
 	//simulation.Simulate("ema_simulate_005")
 	//allSimulate.UpGoSimualte()
 }
