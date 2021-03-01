@@ -100,7 +100,7 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 		}
 		opePct := 0.4
 		preEmaValue := infos[i].EMA4
-		temp
+		emaStartIndex := i - startIndex - DownEmaSoldDays
 		for emaStartIndex++; emaStartIndex <= i-startIndex && alwaysDown; emaStartIndex++ {
 			// 如果持续下降或者是加个降低到一定的百分比，那么也卖出
 			downPct := (value.Close - lastBuyPrice) / lastBuyPrice
