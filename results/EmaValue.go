@@ -33,4 +33,8 @@ type EMAValue struct {
 	EMA30     float64 `db:"ema_30"`
 	EMA35     float64 `db:"ema_35"`
 	EMA40     float64 `db:"ema_40"`
+	EMA45     float64 `db:"ema_45"`
+	EMA50     float64 `db:"ema_50"`
+	EMA55     float64 `db:"ema_55"`
+	EMA60     float64 `db:"ema_60"`
 }

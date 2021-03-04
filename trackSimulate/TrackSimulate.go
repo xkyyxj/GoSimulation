@@ -4,6 +4,7 @@ import (
 	"io/ioutil"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
+	"stock_simulate/simulation"
 	"sync"
 )
 
@@ -17,6 +18,7 @@ const (
 
 var mutex sync.Mutex
 
+// TODO -- 看下盈利比率的中位数是什么？？？
 // 跟踪每一笔交易，决定适当时机做买入卖出操作
 // 1. 当某次买入的票子持有达到NoWinDays天的时候，不管结果如何，都做卖出操作（或者换种策略，持有就持有，当稍微有盈利了之后才卖出呢？）
 // 2. 当某次买入的票子盈利达到了TargetWinPct的时候，我们就做卖出操作（此处可优化，比如让利润奔跑）
@@ -104,8 +106,8 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 		}
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
-		retOpeTime := HistoryDownJudge(baseInfos)
-		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		//retOpeTime := HistoryDownJudge(baseInfos)
+		retOpeTime := simulation.LongEmaSimulate(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
 		for i, info := range retOpeTime {

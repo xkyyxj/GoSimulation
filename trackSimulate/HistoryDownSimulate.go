@@ -6,6 +6,8 @@ import (
 	"strconv"
 )
 
+// TODO -- HistoryDown稳定是稳定，但是就是对于贵州茅台这种大行情，就会错过去，所以说，需要一种变相机制考虑这种情况（贪婪啊）
+// TODO -- 考虑下这种东西是不是还可以更稳定一点？？？？？
 const (
 	HistoryDownConsiderBuy = 200 // 200天历史低值的话考虑买入
 	DownEmaField           = 4
