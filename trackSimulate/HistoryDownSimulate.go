@@ -12,7 +12,7 @@ const (
 	HistoryDownConsiderBuy = 200 // 200天历史低值的话考虑买入
 	DownEmaField           = 4
 	DownEmaSoldDays        = 4 // 当EMA三天下降的时候就卖出好吧
-	DownSoldPct            = -0.8
+	DownSoldPct            = -0.2
 	DownPctSoldPct         = 0 // 加个比上次买入下跌到了DownSoldPct时卖出的百分比
 
 	LastWin     = 1 // 上次获利

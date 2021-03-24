@@ -4,7 +4,6 @@ import (
 	"io/ioutil"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
-	"stock_simulate/simulation"
 	"sync"
 )
 
@@ -13,7 +12,8 @@ const (
 	DefaultThreadNum = 100
 	NoWinDays        = 10 // 到达指定天数仍然没有盈利，就卖出操作（全仓）
 	TargetWinPct     = 0.15
-	NoWinPct         = 0.03 // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数（TODO）
+	NoWinPct         = 0.03  // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数（TODO）
+	LongBackPct      = -0.08 // 最大回撤达到这个百分比的时候，就在最终的输出结果当中做一个反馈
 )
 
 var mutex sync.Mutex
@@ -106,11 +106,30 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 		}
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
-		//retOpeTime := HistoryDownJudge(baseInfos)
-		retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		retOpeTime := HistoryDownJudge(baseInfos)
+		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
 		// 开始做分析
 		var lastDetail OperationDetail
+		lastDetail.TotalMny = InitMny
 		for i, info := range retOpeTime {
+			// 每次开始之前需要检查一下是不是达到了最大回撤的百分比
+			tempHoldMny := float64(holdInfos.HoldNum) * baseInfos[i].Close
+			tempTotalMny := tempHoldMny + holdInfos.LeftMny
+			deltaPct := (tempTotalMny - lastDetail.TotalMny) / lastDetail.TotalMny
+			if deltaPct < LongBackPct {
+				backDetail := OperationDetail{}
+				backDetail.TsCode = tsCode
+				backDetail.OpeClose = baseInfos[i].Close
+				backDetail.OpeNum = 0
+				backDetail.TradeDate = baseInfos[i].TradeDate
+				backDetail.HoldNum = holdInfos.HoldNum
+				backDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
+				backDetail.LeftMny = holdInfos.LeftMny
+				backDetail.TotalMny = tempTotalMny
+				backDetail.OpeFlag = NothingOpe
+				backDetail.AddDetailToExcelData(&excelData)
+			}
+
 			tempDetail := OperationDetail{}
 			tempOpePct := info.OpePercent
 			if info.OpeFlag == BuyFlag {

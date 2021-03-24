@@ -12,6 +12,7 @@ const (
 
 	BuyDisplay  = "买入"
 	SoldDisplay = "卖出"
+	NothingOpe  = "无操作"
 )
 
 type StockHoldInfo struct {
