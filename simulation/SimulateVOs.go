@@ -21,11 +21,11 @@ type StockHoldInfo struct {
 }
 
 type SimulateRst struct {
-	winNum       int
-	lostNum      int
-	maxWinPct    float64
-	maxLostPct   float64 // 此处应该是正数
-	maxWinStock  string
+	WinNum       int
+	LostNum      int
+	MaxWinPct    float64
+	MaxLostPct   float64 // 此处应该是正数
+	MaxWinStock  string
 	maxLostStock string
 	parameter    string
 }
@@ -36,16 +36,18 @@ type OperateInfo struct {
 }
 
 type OperationDetail struct {
-	TsCode    string
-	TsName    string
-	OpeNum    int
-	OpeClose  float64
-	TradeDate string
-	HoldNum   int
-	HoldMny   float64
-	LeftMny   float64
-	TotalMny  float64
-	OpeFlag   string
+	TsCode     string
+	TsName     string
+	OpeNum     int
+	OpeClose   float64
+	TradeDate  string
+	HoldNum    int
+	HoldMny    float64
+	LeftMny    float64
+	TotalMny   float64
+	OpeFlag    string
+	TradeIndex int
+	HasSold    bool
 }
 
 func (operationDetail *OperationDetail) AddDetailToExcelData(excelData *file.ExcelData) {
@@ -65,11 +67,11 @@ func (operationDetail *OperationDetail) AddDetailToExcelData(excelData *file.Exc
 
 func (simulateRst *SimulateRst) ToString() string {
 	outString := ""
-	outString += "winNumber is: " + strconv.Itoa(simulateRst.winNum) + "\r\n"
-	outString += "lostNum is: " + strconv.Itoa(simulateRst.lostNum) + "\r\n"
-	outString += "maxWinPct is: " + strconv.FormatFloat(simulateRst.maxWinPct, 'E', 2, 64) + "\r\n"
-	outString += "maxLostPct is: " + strconv.FormatFloat(simulateRst.maxLostPct, 'E', 2, 64) + "\r\n"
-	outString += "maxWinStock is " + simulateRst.maxWinStock + "\r\n"
+	outString += "winNumber is: " + strconv.Itoa(simulateRst.WinNum) + "\r\n"
+	outString += "LostNum is: " + strconv.Itoa(simulateRst.LostNum) + "\r\n"
+	outString += "MaxWinPct is: " + strconv.FormatFloat(simulateRst.MaxWinPct, 'E', 2, 64) + "\r\n"
+	outString += "MaxLostPct is: " + strconv.FormatFloat(simulateRst.MaxLostPct, 'E', 2, 64) + "\r\n"
+	outString += "MaxWinStock is " + simulateRst.MaxWinStock + "\r\n"
 	outString += "maxLostStock is " + simulateRst.maxLostStock + "\r\n"
 	outString += "parameter is " + simulateRst.parameter + "\r\n"
 	return outString

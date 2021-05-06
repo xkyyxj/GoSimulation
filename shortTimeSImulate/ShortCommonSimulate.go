@@ -1,15 +1,15 @@
-package simulation
+package shortTimeSImulate
 
 import (
 	"io/ioutil"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
+	"stock_simulate/simulation"
 	"sync"
 )
 
 const (
-	InitMny          = 100000
-	DefaultThreadNum = 100
+	SoldDays = 5 // 达到了多少天之后就卖出操作，短期操作
 )
 
 var mutex sync.Mutex
@@ -19,19 +19,19 @@ func Simulate(dirName string) {
 	var currIndex int
 	currIndex = 0
 	stockList := dataCenter.QueryStockCodes("")
-	channelSlice := make([]<-chan SimulateRst, DefaultThreadNum)
+	channelSlice := make([]<-chan simulation.SimulateRst, simulation.DefaultThreadNum)
 	var waitGroup sync.WaitGroup
-	waitGroup.Add(DefaultThreadNum)
-	for i := 0; i < DefaultThreadNum; i++ {
-		channel := make(chan SimulateRst, 10)
-		go simulateGrp(&currIndex, stockList, channel, &waitGroup, dirName)
+	waitGroup.Add(simulation.DefaultThreadNum)
+	for i := 0; i < simulation.DefaultThreadNum; i++ {
+		channel := make(chan simulation.SimulateRst, 10)
+		go singleSimulate(&currIndex, stockList, channel, &waitGroup, dirName)
 		channelSlice[i] = channel
 	}
 
 	// 最终结果统计
 	waitGroup.Wait()
 	println("in here!!")
-	finalRst := SimulateRst{
+	finalRst := simulation.SimulateRst{
 		WinNum:     0,
 		LostNum:    0,
 		MaxWinPct:  0,
@@ -55,16 +55,16 @@ func Simulate(dirName string) {
 	println("Calculate finished!!!")
 }
 
-func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
+func singleSimulate(index *int, stockList []string, channel chan simulation.SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
 	defer waitGroup.Done()
 	// 最终返回结果
-	simulateRst := SimulateRst{}
+	simulateRst := simulation.SimulateRst{}
 	for {
 		// 创建初始持仓信息
-		holdInfos := StockHoldInfo{
-			InitMny: InitMny,
+		holdInfos := simulation.StockHoldInfo{
+			InitMny: simulation.InitMny,
 			HoldNum: 0,
-			LeftMny: InitMny,
+			LeftMny: simulation.InitMny,
 		}
 		// 创建写入Excel的数据
 		excelData := file.ExcelData{
@@ -81,9 +81,13 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 		*index = *index + 1
 		mutex.Unlock()
 
+		// 记录买入信息
+		var timeIndexBuyInfo []*simulation.OperationDetail
+		var buyPriceOrderInfo []*simulation.OperationDetail
+
 		// 查询出对应的股票基本信息来
 		dataCenter := datacenter.GetInstance()
-		baseInfos := dataCenter.QueryStockBaseInfo(" ts_code='" + tsCode + "' order by trade_date desc limit 1000")
+		baseInfos := dataCenter.QueryStockBaseInfo(" ts_code='" + tsCode + "' order by trade_date desc limit 1200")
 		if baseInfos == nil || len(baseInfos) == 0 {
 			continue
 		}
@@ -95,14 +99,13 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
 		//retOpeTime := HistoryDownJudge(baseInfos)
-		//retOpeTime := HistoryDownLongJudge(baseInfos)
-		retOpeTime := LongEmaSimulate(baseInfos)
+		retOpeTime := FourDayDownJudge(baseInfos)
 		// 开始做分析
-		var lastDetail OperationDetail
+		var lastDetail simulation.OperationDetail
 		for i, info := range retOpeTime {
-			tempDetail := OperationDetail{}
+			tempDetail := simulation.OperationDetail{}
 			tempOpePct := info.OpePercent
-			if info.OpeFlag == BuyFlag {
+			if info.OpeFlag == simulation.BuyFlag {
 				tempBuyMny := holdInfos.LeftMny * tempOpePct
 				if tempBuyMny > holdInfos.LeftMny {
 					tempBuyMny = holdInfos.LeftMny
@@ -124,43 +127,78 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 				tempDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
 				tempDetail.LeftMny = holdInfos.LeftMny
 				tempDetail.TotalMny = tempDetail.HoldMny + tempDetail.LeftMny
-				tempDetail.OpeFlag = BuyDisplay
+				tempDetail.OpeFlag = simulation.BuyDisplay
+				tempDetail.TradeIndex = i
 				tempDetail.AddDetailToExcelData(&excelData)
-				lastDetail = tempDetail
-			} else if info.OpeFlag == SoldFlag {
-				tempOpeNum := float64(holdInfos.HoldNum) * tempOpePct
-				// 卖出都是按手为单位(100的整数)
-				realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
-				if realOpeNum == 0 {
-					continue
-				}
-				// 更新持仓信息
-				holdInfos.HoldNum -= realOpeNum
-				holdInfos.LeftMny += float64(realOpeNum) * baseInfos[i].Close
+				timeIndexBuyInfo = append(timeIndexBuyInfo, &tempDetail)
+				buyPriceOrderInfo = append(buyPriceOrderInfo, &tempDetail)
 
-				// 更新操作信息
-				tempDetail.TsCode = tsCode
-				tempDetail.OpeClose = baseInfos[i].Close
-				tempDetail.OpeNum = realOpeNum
-				tempDetail.TradeDate = baseInfos[i].TradeDate
-				tempDetail.HoldNum = holdInfos.HoldNum
-				tempDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
-				tempDetail.LeftMny = holdInfos.LeftMny
-				tempDetail.TotalMny = tempDetail.HoldMny + tempDetail.LeftMny
-				tempDetail.OpeFlag = SoldDisplay
-				tempDetail.AddDetailToExcelData(&excelData)
+				// 针对买入价格做下排序
+				for j := len(buyPriceOrderInfo) - 1; j > 0; j-- {
+					if buyPriceOrderInfo[j].OpeClose > buyPriceOrderInfo[j-1].OpeClose {
+						temp := buyPriceOrderInfo[j]
+						buyPriceOrderInfo[j] = buyPriceOrderInfo[j-1]
+						buyPriceOrderInfo[j-1] = temp
+					} else {
+						break
+					}
+				}
 				lastDetail = tempDetail
 			}
+			tempOpeNum := 0
+			// 检查下是否有过期的买入记录
+			for {
+				if len(timeIndexBuyInfo) <= 0 {
+					break
+				}
+				// 已经卖出的去掉
+				if timeIndexBuyInfo[0].HasSold {
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+					continue
+				}
+				// FIXME -- 此处指定了买入的必须盈利了才能卖出
+				// && baseInfos[i].Close > timeIndexBuyInfo[0].OpeClose
+				if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > SoldDays {
+					tempOpeNum += timeIndexBuyInfo[0].OpeNum
+					timeIndexBuyInfo[0].HasSold = true
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+				} else {
+					break
+				}
+			}
+
+			// 卖出都是按手为单位(100的整数)
+			realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
+			if realOpeNum == 0 {
+				continue
+			}
+			// 更新持仓信息
+			holdInfos.HoldNum -= realOpeNum
+			holdInfos.LeftMny += float64(realOpeNum) * baseInfos[i].Close
+
+			// 更新操作信息
+			soldDetail := simulation.OperationDetail{}
+			soldDetail.TsCode = tsCode
+			soldDetail.OpeClose = baseInfos[i].Close
+			soldDetail.OpeNum = realOpeNum
+			soldDetail.TradeDate = baseInfos[i].TradeDate
+			soldDetail.HoldNum = holdInfos.HoldNum
+			soldDetail.HoldMny = float64(holdInfos.HoldNum) * baseInfos[i].Close
+			soldDetail.LeftMny = holdInfos.LeftMny
+			soldDetail.TotalMny = soldDetail.HoldMny + soldDetail.LeftMny
+			soldDetail.OpeFlag = simulation.SoldDisplay
+			soldDetail.AddDetailToExcelData(&excelData)
+			lastDetail = soldDetail
 		}
-		if lastDetail.TotalMny > InitMny {
+		if lastDetail.TotalMny > simulation.InitMny {
 			simulateRst.WinNum += 1
-			winPct := (lastDetail.TotalMny - InitMny) / InitMny
+			winPct := (lastDetail.TotalMny - simulation.InitMny) / simulation.InitMny
 			if winPct > simulateRst.MaxWinPct {
 				simulateRst.MaxWinPct = winPct
 			}
 		} else {
 			simulateRst.LostNum += 1
-			winPct := (InitMny - lastDetail.TotalMny) / InitMny
+			winPct := (simulation.InitMny - lastDetail.TotalMny) / simulation.InitMny
 			if winPct > simulateRst.MaxLostPct {
 				simulateRst.MaxLostPct = winPct
 			}
