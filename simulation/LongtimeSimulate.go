@@ -26,7 +26,11 @@ func LongEmaSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
 	dataCenter := datacenter.GetInstance()
 	tsCode := baseInfos[0].TsCode
 	beginTradeDate := baseInfos[0].TradeDate
-	sql := "select ts_code, trade_date, ifnull(ema_60, 0) ema_60, ifnull(ema_15, 0) ema_15, ifnull(ema_5, 0) ema_5 from ema_value where ts_code='" + tsCode + "' and trade_date>='" + beginTradeDate + "' order by trade_date"
+	sql := "select ts_code, trade_date, ifnull(ema_60, 0) ema_60, ifnull(ema_15, 0) ema_15, " +
+		"ifnull(ema_40, 0) ema_40, " +
+		"ifnull(ema_7, 0) ema_7, " +
+		"ifnull(ema_5, 0) ema_5 " +
+		"from ema_value where ts_code='" + tsCode + "' and trade_date>='" + beginTradeDate + "' order by trade_date"
 	err := dataCenter.Db.Select(&infos, sql)
 	if err != nil {
 		panic(err)

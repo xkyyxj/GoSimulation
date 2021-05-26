@@ -5,16 +5,11 @@ import (
 	"stock_simulate/results"
 )
 
-const (
-	LongTimeTargetWin = 0.4 // 目标盈利百分比
-	EMAUpDays         = 5   // EMA连续四天上涨才开始买入
-)
+const ()
 
-// 根据EMA来进行判定
-// 1. 如果EMA60开始上涨，那么就买入
-// 2. 如果EMA60开始下跌，那么就卖出（相比与前一天下跌了）（全仓）
-// 3. 如果达到指定天数之后仍然没有达到指定盈利，那么也卖出（全仓）（或者换种策略，持有就持有，当稍微有盈利了之后才卖出呢？）
-func LongEmaSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
+// 判定是否持续性上涨，对于持续性上涨的做买入操作
+// 卖出操作
+func UpHighSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
 	if baseInfos == nil || len(baseInfos) == 0 {
 		return nil
 	}
@@ -25,11 +20,7 @@ func LongEmaSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
 	dataCenter := datacenter.GetInstance()
 	tsCode := baseInfos[0].TsCode
 	beginTradeDate := baseInfos[0].TradeDate
-	sql := "select ts_code, trade_date, ifnull(ema_60, 0) ema_60, ifnull(ema_40, 0) ema_40, ifnull(ema_15, 0) ema_15, " +
-		"ifnull(ema_10, 0) ema_10" +
-		"ifnull(ema_6, 0) ema_6" +
-		"ifnull(ema_5, 0) ema_5 from ema_value where ts_code='" + tsCode + "' and trade_date>='" + beginTradeDate +
-		"' order by trade_date"
+	sql := "select ts_code, trade_date, ifnull(ema_60, 0) ema_60, ifnull(ema_15, 0) ema_15, ifnull(ema_5, 0) ema_5 from ema_value where ts_code='" + tsCode + "' and trade_date>='" + beginTradeDate + "' order by trade_date"
 	err := dataCenter.Db.Select(&infos, sql)
 	if err != nil {
 		panic(err)
@@ -38,7 +29,7 @@ func LongEmaSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
 
 	emaUpDays := 0
 	for i, emaValue := range infos {
-		if i > 0 && emaValue.EMA40 > infos[i-1].EMA40 {
+		if i > 0 && emaValue.EMA60 > infos[i-1].EMA60 {
 			emaUpDays = emaUpDays + 1
 		}
 		if i < EMAUpDays {
@@ -52,9 +43,9 @@ func LongEmaSimulate(baseInfos []results.StockBaseInfo) []OperateInfo {
 		tempOpeInfo := OperateInfo{}
 		if emaUpDays > EMAUpDays && emaValue.EMA5 > infos[i-1].EMA5 {
 			tempOpeInfo.OpeFlag = BuyFlag
-			tempOpeInfo.OpePercent = 0.8
+			tempOpeInfo.OpePercent = 0.5
 			// FIXME -- 增加了一个判定条件，如果是中等程度地EMA开始下降的话，我们就开始卖出好了
-		} else if emaValue.EMA60 < infos[i-1].EMA60 || emaValue.EMA6 < infos[i-1].EMA6 {
+		} else if emaValue.EMA60 < infos[i-1].EMA60 || emaValue.EMA15 < infos[i-1].EMA15 {
 			tempOpeInfo.OpeFlag = SoldFlag
 			tempOpeInfo.OpePercent = 1
 		} else {

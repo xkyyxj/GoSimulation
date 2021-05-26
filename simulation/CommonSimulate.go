@@ -2,14 +2,18 @@ package simulation
 
 import (
 	"io/ioutil"
+	"math"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
+	"stock_simulate/results"
 	"sync"
 )
 
 const (
 	InitMny          = 100000
 	DefaultThreadNum = 100
+
+	DisplayDeltaPct = 0.03 // 当当前持仓金额相比于上次持仓金额的百分比达到该数值时，即便无操作也将该条结果显示到最终的交易明细当中
 )
 
 var mutex sync.Mutex
@@ -150,6 +154,8 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 				tempDetail.OpeFlag = SoldDisplay
 				tempDetail.AddDetailToExcelData(&excelData)
 				lastDetail = tempDetail
+			} else {
+				addDeltaInfo(&lastDetail, &baseInfos[i], &excelData)
 			}
 		}
 		if lastDetail.TotalMny > InitMny {
@@ -172,4 +178,28 @@ func simulateGrp(index *int, stockList []string, channel chan SimulateRst, waitG
 		excelWriter.Write(excelData)
 	}
 	channel <- simulateRst
+}
+
+func addDeltaInfo(lastDetail *OperationDetail, baseInfo *results.StockBaseInfo, excelData *file.ExcelData) {
+	detail := OperationDetail{
+		TsCode:     lastDetail.TsCode,
+		TsName:     lastDetail.TsName,
+		OpeNum:     0,
+		OpeClose:   baseInfo.Close,
+		TradeDate:  baseInfo.TradeDate,
+		HoldNum:    lastDetail.HoldNum,
+		HoldMny:    0, // 下面做计算
+		LeftMny:    lastDetail.LeftMny,
+		OpeFlag:    NothingOpe,
+		TradeIndex: 0,
+		HasSold:    false,
+	}
+	currHoldMny := float64(lastDetail.HoldNum) * baseInfo.Close
+	deltaMny := math.Abs(currHoldMny - lastDetail.HoldMny)
+	deltaPct := deltaMny / lastDetail.HoldMny
+	detail.HoldMny = currHoldMny
+	detail.TotalMny = detail.HoldMny + detail.LeftMny
+	if deltaPct >= DisplayDeltaPct {
+		detail.AddDetailToExcelData(excelData)
+	}
 }

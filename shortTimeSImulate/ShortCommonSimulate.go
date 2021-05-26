@@ -5,6 +5,7 @@ import (
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
 	"stock_simulate/simulation"
+	"strconv"
 	"sync"
 )
 
@@ -58,7 +59,15 @@ func Simulate(dirName string) {
 func singleSimulate(index *int, stockList []string, channel chan simulation.SimulateRst, waitGroup *sync.WaitGroup, dirName string) {
 	defer waitGroup.Done()
 	// 最终返回结果
-	simulateRst := simulation.SimulateRst{}
+	simulateRst := simulation.SimulateRst{
+		WinNum:       0,
+		LostNum:      0,
+		MaxWinPct:    0,
+		MaxLostPct:   0,
+		MaxWinStock:  "",
+		MaxLostStock: "",
+		Parameter:    "",
+	}
 	for {
 		// 创建初始持仓信息
 		holdInfos := simulation.StockHoldInfo{
@@ -102,6 +111,7 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 		retOpeTime := FourDayDownJudge(baseInfos)
 		// 开始做分析
 		var lastDetail simulation.OperationDetail
+		lastDetail.TotalMny = simulation.InitMny
 		for i, info := range retOpeTime {
 			tempDetail := simulation.OperationDetail{}
 			tempOpePct := info.OpePercent
@@ -209,5 +219,7 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 		excelWriter := file.New(fileName, dirName)
 		excelWriter.Write(excelData)
 	}
+
+	print("max lost pct is " + strconv.Itoa(int(simulateRst.MaxLostPct)))
 	channel <- simulateRst
 }

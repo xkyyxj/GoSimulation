@@ -22,13 +22,15 @@ type StockHoldInfo struct {
 }
 
 type SimulateRst struct {
-	winNum       int
-	lostNum      int
-	maxWinPct    float64
-	maxLostPct   float64 // 此处应该是正数
-	maxWinStock  string
-	maxLostStock string
-	parameter    string
+	winNum         int
+	lostNum        int
+	maxWinPct      float64
+	maxLostPct     float64 // 此处应该是正数
+	maxWinStock    string
+	maxLostStock   string
+	parameter      string
+	WinStockCodes  string
+	LostStockCodes string
 }
 
 type OperateInfo struct {

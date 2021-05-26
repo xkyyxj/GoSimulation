@@ -3,7 +3,7 @@ package main
 import (
 	_ "database/sql"
 	"stock_simulate/datacenter"
-	"stock_simulate/shortTimeSImulate"
+	"stock_simulate/simulation"
 )
 
 var SingleDataCenter *datacenter.DataCenter
@@ -38,11 +38,13 @@ func main() {
 	//buyPriceOrderInfo = append(buyPriceOrderInfo, &tempDetail)
 	//timeIndexBuyInfo[0].HasSold = false
 	//println("has sold is {}", buyPriceOrderInfo[0].HasSold)
-	//trackSimulate.Simulate("track_long_time_0000013")
+	//trackSimulate.Simulate("track_long_time_0000018")
 	// 短期操作
-	shortTimeSImulate.Simulate("short_simulate_000002")
+	//shortTimeSImulate.Simulate("short_simulate_000002")
+	// 长期操作
+	//trackSimulate.Simulate("long_long_time_0000006")
 
-	//simulation.Simulate("ema_simulate_005")
+	simulation.Simulate("long_common_simulate_001")
 	//allSimulate.UpGoSimualte()
 }
 

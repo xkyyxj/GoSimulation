@@ -12,6 +12,7 @@ const (
 
 	BuyDisplay  = "买入"
 	SoldDisplay = "卖出"
+	NothingOpe  = "无操作"
 )
 
 type StockHoldInfo struct {
@@ -26,8 +27,8 @@ type SimulateRst struct {
 	MaxWinPct    float64
 	MaxLostPct   float64 // 此处应该是正数
 	MaxWinStock  string
-	maxLostStock string
-	parameter    string
+	MaxLostStock string
+	Parameter    string
 }
 
 type OperateInfo struct {
@@ -72,7 +73,7 @@ func (simulateRst *SimulateRst) ToString() string {
 	outString += "MaxWinPct is: " + strconv.FormatFloat(simulateRst.MaxWinPct, 'E', 2, 64) + "\r\n"
 	outString += "MaxLostPct is: " + strconv.FormatFloat(simulateRst.MaxLostPct, 'E', 2, 64) + "\r\n"
 	outString += "MaxWinStock is " + simulateRst.MaxWinStock + "\r\n"
-	outString += "maxLostStock is " + simulateRst.maxLostStock + "\r\n"
-	outString += "parameter is " + simulateRst.parameter + "\r\n"
+	outString += "MaxLostStock is " + simulateRst.MaxLostStock + "\r\n"
+	outString += "Parameter is " + simulateRst.Parameter + "\r\n"
 	return outString
 }
