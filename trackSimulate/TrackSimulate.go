@@ -2,18 +2,24 @@ package trackSimulate
 
 import (
 	"io/ioutil"
+	"math"
 	"stock_simulate/datacenter"
 	"stock_simulate/file"
+	"stock_simulate/results"
+	"stock_simulate/simulation"
 	"sync"
 )
 
 const (
 	InitMny          = 100000
 	DefaultThreadNum = 100
-	NoWinDays        = 10 // 到达指定天数仍然没有盈利，就卖出操作（全仓）
-	TargetWinPct     = 0.15
-	NoWinPct         = 0.03  // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数（TODO）
-	LongBackPct      = -0.08 // 最大回撤达到这个百分比的时候，就在最终的输出结果当中做一个反馈
+	// 原先的默认值是15，现在改成5试下效果，对于LonggSimulate
+	NoWinDays    = 5 // 到达指定天数仍然没有盈利，就卖出操作（全仓）
+	TargetWinPct = 0.15
+	NoWinPct     = 0.03  // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数（TODO）
+	LongBackPct  = -0.08 // 最大回撤达到这个百分比的时候，就在最终的输出结果当中做一个反馈
+
+	DisplayDeltaPct = 0.05 // 当当前持仓金额相比于上次持仓金额的百分比达到该数值时，即便无操作也将该条结果显示到最终的交易明细当中
 )
 
 var mutex sync.Mutex
@@ -22,6 +28,7 @@ var mutex sync.Mutex
 // 跟踪每一笔交易，决定适当时机做买入卖出操作
 // 1. 当某次买入的票子持有达到NoWinDays天的时候，不管结果如何，都做卖出操作（或者换种策略，持有就持有，当稍微有盈利了之后才卖出呢？）
 // 2. 当某次买入的票子盈利达到了TargetWinPct的时候，我们就做卖出操作（此处可优化，比如让利润奔跑）
+// 3. 当多次操作持续性失利的时候，我们可以考虑尽量卖出操作
 func Simulate(dirName string) {
 	dataCenter := datacenter.GetInstance()
 	var currIndex int
@@ -106,9 +113,10 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 		}
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
-		retOpeTime := HistoryDownJudge(baseInfos)
-		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		//retOpeTime := HistoryDownJudge(baseInfos)
+		retOpeTime := simulation.LongEmaSimulate(baseInfos)
 		// 开始做分析
+		//lostCount := 0		// 失利次数
 		var lastDetail OperationDetail
 		lastDetail.TotalMny = InitMny
 		for i, info := range retOpeTime {
@@ -172,6 +180,8 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 				}
 				lastDetail = tempDetail
 			}
+
+			// ---------------------------- 下面是卖出操作 ----------------------------------------------------------------
 			tempOpeNum := 0
 			// 检查下是否有过期的买入记录
 			for {
@@ -183,8 +193,10 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 					timeIndexBuyInfo = timeIndexBuyInfo[1:]
 					continue
 				}
-				// FIXME -- 此处指定了买入的必须盈利了才能卖出
-				if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > NoWinDays && baseInfos[i].Close > timeIndexBuyInfo[0].OpeClose {
+				// FIXME -- 此处指定了买入的必须盈利了才能卖出 -- addDeltaInfo(&lastDetail, &baseInfos[i], &excelData)
+				// Important -- 此处加个判定-如果是今天相比较于昨天还是上涨的话，那么我们就不卖出了
+				// TODO -- 此处改动是有效地，那么就可以另外考虑一下上涨过程当中的部分回撤，OK？
+				if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > NoWinDays && baseInfos[i].Close < baseInfos[i-1].Close {
 					tempOpeNum += timeIndexBuyInfo[0].OpeNum
 					timeIndexBuyInfo[0].HasSold = true
 					timeIndexBuyInfo = timeIndexBuyInfo[1:]
@@ -216,6 +228,7 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 			// 卖出都是按手为单位(100的整数)
 			realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
 			if realOpeNum == 0 {
+				addDeltaInfo(&lastDetail, &baseInfos[i], &excelData)
 				continue
 			}
 			// 更新持仓信息
@@ -242,12 +255,14 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 			if winPct > simulateRst.maxWinPct {
 				simulateRst.maxWinPct = winPct
 			}
+			simulateRst.WinStockCodes += baseInfos[0].TsCode
 		} else {
 			simulateRst.lostNum += 1
 			winPct := (InitMny - lastDetail.TotalMny) / InitMny
 			if winPct > simulateRst.maxLostPct {
 				simulateRst.maxLostPct = winPct
 			}
+			simulateRst.LostStockCodes += baseInfos[0].TsCode
 		}
 
 		// 将实时分析结果写入到Excel文件当中去
@@ -256,4 +271,28 @@ func singleSimulate(index *int, stockList []string, channel chan SimulateRst, wa
 		excelWriter.Write(excelData)
 	}
 	channel <- simulateRst
+}
+
+func addDeltaInfo(lastDetail *OperationDetail, baseInfo *results.StockBaseInfo, excelData *file.ExcelData) {
+	detail := OperationDetail{
+		TsCode:     lastDetail.TsCode,
+		TsName:     lastDetail.TsName,
+		OpeNum:     0,
+		OpeClose:   baseInfo.Close,
+		TradeDate:  baseInfo.TradeDate,
+		HoldNum:    lastDetail.HoldNum,
+		HoldMny:    0, // 下面做计算
+		LeftMny:    lastDetail.LeftMny,
+		OpeFlag:    NothingOpe,
+		TradeIndex: 0,
+		HasSold:    false,
+	}
+	currHoldMny := float64(lastDetail.HoldNum) * baseInfo.Close
+	deltaMny := math.Abs(currHoldMny - lastDetail.HoldMny)
+	deltaPct := deltaMny / lastDetail.HoldMny
+	detail.HoldMny = currHoldMny
+	detail.TotalMny = detail.HoldMny + detail.LeftMny
+	if deltaPct >= DisplayDeltaPct {
+		detail.AddDetailToExcelData(excelData)
+	}
 }
