@@ -19,17 +19,12 @@ const (
 	LastLost    = 2 // 上次失利
 	LastNothing = 3 // 上次竹篮打水一场空，既没有获利也没有失利
 
-	LostNumCount = 3 // 连续失利次数
-
 	BuyAfterDownDays = 3 // 如果买入三天之后，还是持续下跌？
-
-	ConLostBuyCount = 3 // 当连续失利之后，ConLostBuyCount天之内必须要连续上涨才能够买入
 )
 
 // 历史低值验证方法
 // 1. 当当天价格达到了HistoryDownConsiderBuy天的历史低值时，并且第二天价格开始突破的时候考虑买入
 // 2. 结合EMA吧，当EMA4三天下降的时候卖出
-// 3. 如果是连续多次买入失利，那么当下一次买入机会到来的时候，我们必须等待上涨了ConLostBuyCount天之后才能买入
 func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 	if baseInfos == nil || len(baseInfos) == 0 {
 		return nil
@@ -65,10 +60,6 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 		return retVal
 	}
 
-	// 对于失手次数，加个判定，如果是失手次数比较多的时候，那么可能价格一直在下降，那么这时候就需要上涨幅度比较高一点或者上涨天数多一些才考虑买入
-	// 同时如果失手次数一直比较多的话，可以稍微盈利就卖出，除非买入后一直上涨，没有下跌的趋势或者涨幅已经比较高了
-	lostCount := 0 // 失手次数
-	lostNotBuyIndex := -1
 	downDaysCount := 0
 	var lastBuyPrice float64 = 0
 	var lastOpeStatus int = LastNothing
@@ -82,7 +73,7 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 
 		hasBuy := false
 		tempOpeInfo := OperateInfo{}
-		if downDaysCount >= HistoryDownConsiderBuy && lostCount <= LostNumCount {
+		if downDaysCount >= HistoryDownConsiderBuy {
 			// 判定一下，如果是相比于上次的买入价格，价格更低了，那么我们就执行卖出操作
 			// 此处意味着前一天的价格已经是HistoryDownConsiderBuy天的最低值了
 			if value.PctChg > 0 {
@@ -95,25 +86,6 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 			// 如果是上次操作失利了，那么我们这次就直接多买点
 			if lastOpeStatus == LastLost {
 				tempOpeInfo.OpePercent = 0.6
-			}
-		} else if downDaysCount >= HistoryDownConsiderBuy && lostCount > LostNumCount {
-			lostNotBuyIndex = i
-		}
-
-		// 连续失利情况下的处理逻辑
-		if lostNotBuyIndex != -1 && ((i - lostNotBuyIndex) == ConLostBuyCount) {
-			tempCount := 0
-			canBuy := true
-			preClose := baseInfos[lostNotBuyIndex].Close
-			for ; tempCount < (i-lostNotBuyIndex) && canBuy; tempCount++ {
-				canBuy = baseInfos[i].Close > preClose
-			}
-
-			if canBuy {
-				tempOpeInfo.OpeFlag = BuyFlag
-				tempOpeInfo.OpePercent = 0.7
-				lastBuyPrice = value.Close
-				hasBuy = true
 			}
 		}
 
@@ -154,10 +126,8 @@ func HistoryDownJudge(baseInfos []results.StockBaseInfo) []OperateInfo {
 			chgPct := (value.Close - lastBuyPrice) / lastBuyPrice
 			if chgPct < 0 {
 				lastOpeStatus = LastLost
-				lostCount += 1
 			} else if chgPct > 0 {
 				lastOpeStatus = LastWin
-				lostCount = 0
 			} else {
 				lastOpeStatus = LastNothing
 			}

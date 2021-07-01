@@ -4,6 +4,7 @@ import (
 	_ "database/sql"
 	"stock_simulate/datacenter"
 	"stock_simulate/simulation"
+	//"stock_simulate/speSImulate"
 )
 
 var SingleDataCenter *datacenter.DataCenter
@@ -44,7 +45,8 @@ func main() {
 	// 长期操作
 	//trackSimulate.Simulate("long_long_time_0000006")
 
-	simulation.Simulate("long_common_simulate_001")
+	simulation.Simulate("history_down_simulate_001")
+	//speSImulate.Simulate("tian_0002")
 	//allSimulate.UpGoSimualte()
 }
 

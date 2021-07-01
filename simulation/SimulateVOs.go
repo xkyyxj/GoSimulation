@@ -9,6 +9,7 @@ const (
 	BuyFlag  = 1
 	SoldFlag = 2
 	Nothing  = 3
+	HoldFlag = 4 // 推荐持有，仅供推荐
 
 	BuyDisplay  = "买入"
 	SoldDisplay = "卖出"
@@ -49,6 +50,7 @@ type OperationDetail struct {
 	OpeFlag    string
 	TradeIndex int
 	HasSold    bool
+	MaxWinPct  float64
 }
 
 func (operationDetail *OperationDetail) AddDetailToExcelData(excelData *file.ExcelData) {
