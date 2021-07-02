@@ -30,6 +30,24 @@ type SimulateRst struct {
 	MaxWinStock  string
 	MaxLostStock string
 	Parameter    string
+	DetailInfo   []SingleStockSimulateRst
+}
+
+/**
+单只股票的模拟结果
+*/
+type SingleStockSimulateRst struct {
+	TsCode        string
+	TsName        string
+	LowestMny     float64 // 最低金额
+	LowestPct     float64 // 最低盈利百分比（可能为负值）
+	LowestDay     string  // 最低金额日期
+	HighestMny    float64 // 最高金额
+	HighestPct    float64 // 最高盈利百分比
+	HighestDay    string  // 最高金额日期
+	FinalTotalMny float64 // 最终金额
+	FinalWinPct   float64 // 最终盈利百分比
+	CurrTotalMny  float64 // 当前的总金额（为了统计方便加的字段 -- 废弃，在想啥？）
 }
 
 type OperateInfo struct {
@@ -51,6 +69,24 @@ type OperationDetail struct {
 	TradeIndex int
 	HasSold    bool
 	MaxWinPct  float64
+}
+
+func (simulateRst *SimulateRst) ConvertSimulateRstToExcelData(excelData *file.ExcelData) {
+	if excelData.Columns == nil || len(excelData.Columns) == 0 {
+		excelData.Columns = []string{"股票编码", "股票名称", "最低盈利百分比", "最低金额", "最低金额日期", "最高盈利百分比", "最高金额", "最高金额日期", "最终盈利百分比", "最终金额"}
+	}
+	for _, item := range simulateRst.DetailInfo {
+		excelData.Data["股票编码"] = append(excelData.Data["股票编码"], item.TsCode)
+		excelData.Data["股票名称"] = append(excelData.Data["股票名称"], item.TsName)
+		excelData.Data["最终盈利百分比"] = append(excelData.Data["最终盈利百分比"], item.FinalWinPct)
+		excelData.Data["最低盈利百分比"] = append(excelData.Data["最低盈利百分比"], item.LowestPct)
+		excelData.Data["最低金额"] = append(excelData.Data["最低金额"], item.LowestMny)
+		excelData.Data["最低金额日期"] = append(excelData.Data["最低金额日期"], item.LowestDay)
+		excelData.Data["最终金额"] = append(excelData.Data["最终金额"], item.FinalTotalMny)
+		excelData.Data["最高盈利百分比"] = append(excelData.Data["最高盈利百分比"], item.HighestPct)
+		excelData.Data["最高金额"] = append(excelData.Data["最高金额"], item.HighestMny)
+		excelData.Data["最高金额日期"] = append(excelData.Data["最高金额日期"], item.HighestDay)
+	}
 }
 
 func (operationDetail *OperationDetail) AddDetailToExcelData(excelData *file.ExcelData) {

@@ -11,7 +11,7 @@ import (
 
 const (
 	InitMny          = 100000
-	DefaultThreadNum = 100
+	DefaultThreadNum = 1
 
 	DisplayDeltaPct = 0.03 // 当当前持仓金额相比于上次持仓金额的百分比达到该数值时，即便无操作也将该条结果显示到最终的交易明细当中
 )
@@ -22,7 +22,7 @@ func Simulate(dirName string) {
 	dataCenter := datacenter.GetInstance()
 	var currIndex int
 	currIndex = 0
-	stockList := dataCenter.QueryStockCodes("")
+	stockList := dataCenter.QueryStockCodes(" ts_code = '601100.SH'")
 	channelSlice := make([]<-chan SimulateRst, DefaultThreadNum)
 	var waitGroup sync.WaitGroup
 	waitGroup.Add(DefaultThreadNum)

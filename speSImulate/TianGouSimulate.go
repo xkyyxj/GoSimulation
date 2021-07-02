@@ -7,6 +7,7 @@ import (
 	"stock_simulate/file"
 	"stock_simulate/results"
 	"stock_simulate/simulation"
+	"strconv"
 	"sync"
 )
 
@@ -14,11 +15,11 @@ const (
 	InitMny          = 100000
 	DefaultThreadNum = 100
 	// 原先的默认值是15，现在改成5试下效果，对于LonggSimulate
-	NoWinDays   = 7     // 到达指定天数仍然没有盈利，就卖出操作（全仓）
+	NoWinDays   = 5     // 到达指定天数仍然没有盈利，就卖出操作（全仓）
 	TempWinPCt  = 0.05  // 暂时性盈利百分比，如果在NoWinDays天之内没有达到该值指定的盈利百分比，那么做卖出操作
-	NoWinPct    = 0.05  // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数
+	NoWinPct    = 0.08  // 每笔亏损达到多少的时候就会卖出，不管是否到了NoWinDays指定的天数
 	LongBackPct = -0.08 // 最大回撤达到这个百分比的时候，就在最终的输出结果当中做一个反馈
-	BackSoldPct = 0.5   // 从最大盈利百分比回撤了百分之多少之后就卖出操作，譬如最大盈利百分比是50%，这个值是0.5，那么当盈利百分比达到25%时执行卖出操作
+	BackSoldPct = 0.25  // 从最大盈利百分比回撤了百分之多少之后就卖出操作，譬如最大盈利百分比是50%，这个值是0.5，那么当盈利百分比达到25%时执行卖出操作
 
 	DisplayDeltaPct = 0.05 // 当当前持仓金额相比于上次持仓金额的百分比达到该数值时，即便无操作也将该条结果显示到最终的交易明细当中
 )
@@ -53,6 +54,7 @@ func Simulate(dirName string) {
 		LostNum:    0,
 		MaxWinPct:  0,
 		MaxLostPct: 0,
+		DetailInfo: make([]simulation.SingleStockSimulateRst, 0),
 	}
 	for _, channel := range channelSlice {
 		tempVal := <-channel
@@ -64,9 +66,20 @@ func Simulate(dirName string) {
 		if finalRst.MaxLostPct < tempVal.MaxLostPct {
 			finalRst.MaxLostPct = tempVal.MaxLostPct
 		}
+		finalRst.DetailInfo = append(finalRst.DetailInfo, tempVal.DetailInfo...)
 	}
 
+	// 将每只股票的盈利信息写入到文件当中
+	allStockListWinInfo := file.ExcelData{
+		Data: make(map[string][]interface{}),
+	}
+	finalRst.ConvertSimulateRstToExcelData(&allStockListWinInfo)
+	fileName := "all_list.xlsx"
+	excelWriter := file.New(fileName, dirName)
+	excelWriter.Write(allStockListWinInfo)
+
 	finalRstString := finalRst.ToString()
+	finalRstString += "\n total stock Number is : " + strconv.Itoa(len(stockList))
 	filePath := file.DefaultPreWorkspace + "\\" + dirName + "\\sum.txt"
 	_ = ioutil.WriteFile(filePath, []byte(finalRstString), 0777) //如果文件a.txt已经存在那么会忽略权限参数，清空文件内容。文件不存在会创建文件赋予权限
 	println("Calculate finished!!!")
@@ -87,6 +100,8 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 		excelData := file.ExcelData{
 			Data: make(map[string][]interface{}),
 		}
+		// 该只股票模拟过程当中的统计信息
+		statisticInfo := simulation.SingleStockSimulateRst{}
 		// 创建改制股票
 		mutex.Lock()
 		if *index >= len(stockList) {
@@ -109,6 +124,12 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			continue
 		}
 
+		// 初始化一些统计信息相关字段
+		statisticInfo.TsCode = baseInfos[0].TsCode
+		statisticInfo.TsName = baseInfos[0].TsCode
+		// 此处赋值一个默认值，为了保证判定不会错误
+		statisticInfo.LowestMny = 1000000
+
 		// 对切片进行反序操作
 		for i, j := 0, len(baseInfos)-1; i < j; i, j = i+1, j-1 {
 			baseInfos[i], baseInfos[j] = baseInfos[j], baseInfos[i]
@@ -116,10 +137,13 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 		//retOpeTime := DayJudgeBuyTime(baseInfos)
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
 		//retOpeTime := HistoryDownJudge(baseInfos)
-		retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
+		//retOpeTime := UpSignalSimulate(baseInfos)
+		retOpeTime := UpHighSimulate(baseInfos)
 		// 开始做分析
 		//lostCount := 0		// 失利次数
 		var lastDetail simulation.OperationDetail
+		lastDetail.LeftMny = InitMny
 		lastDetail.TotalMny = InitMny
 		for i, info := range retOpeTime {
 			// 每次开始之前需要检查一下是不是达到了最大回撤的百分比
@@ -186,26 +210,26 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			// ---------------------------- 下面是卖出操作 ----------------------------------------------------------------
 			tempOpeNum := 0
 			// 检查下是否有过期的买入记录
-			//for {
-			//	if len(timeIndexBuyInfo) <= 0 {
-			//		break
-			//	}
-			//	// 已经卖出的去掉
-			//	if timeIndexBuyInfo[0].HasSold {
-			//		timeIndexBuyInfo = timeIndexBuyInfo[1:]
-			//		continue
-			//	}
-			//
-			//	// 如果到达了指定天数并且盈利百分比还是没有到达规定的程度，那么我们卖出
-			//	tempWinPct := (baseInfos[i].Close - timeIndexBuyInfo[0].OpeClose) / timeIndexBuyInfo[0].OpeClose
-			//	if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > NoWinDays && tempWinPct <= TempWinPCt && info.OpeFlag != simulation.HoldFlag {
-			//		tempOpeNum += timeIndexBuyInfo[0].OpeNum
-			//		timeIndexBuyInfo[0].HasSold = true
-			//		timeIndexBuyInfo = timeIndexBuyInfo[1:]
-			//	} else {
-			//		break
-			//	}
-			//}
+			for {
+				if len(timeIndexBuyInfo) <= 0 {
+					break
+				}
+				// 已经卖出的去掉
+				if timeIndexBuyInfo[0].HasSold {
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+					continue
+				}
+
+				// 如果到达了指定天数并且盈利百分比还是没有到达规定的程度，那么我们卖出
+				tempWinPct := (baseInfos[i].Close - timeIndexBuyInfo[0].OpeClose) / timeIndexBuyInfo[0].OpeClose
+				if len(timeIndexBuyInfo) > 0 && (i-timeIndexBuyInfo[0].TradeIndex) > NoWinDays && tempWinPct <= TempWinPCt && info.OpeFlag != simulation.HoldFlag {
+					tempOpeNum += timeIndexBuyInfo[0].OpeNum
+					timeIndexBuyInfo[0].HasSold = true
+					timeIndexBuyInfo = timeIndexBuyInfo[1:]
+				} else {
+					break
+				}
+			}
 
 			// 检查下是否有达到盈利标准的股票
 			for k := 0; k < len(buyPriceOrderInfo); k++ {
@@ -246,6 +270,8 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			realOpeNum := int(tempOpeNum) - (int(tempOpeNum) % 100)
 			if realOpeNum == 0 {
 				addDeltaInfo(&lastDetail, &baseInfos[i], &excelData)
+				// 统计信息计算
+				updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
 				continue
 			}
 			// 更新持仓信息
@@ -265,6 +291,9 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			soldDetail.OpeFlag = simulation.SoldDisplay
 			soldDetail.AddDetailToExcelData(&excelData)
 			lastDetail = soldDetail
+
+			// 统计信息计算
+			updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
 		}
 		if lastDetail.TotalMny > InitMny {
 			simulateRst.WinNum += 1
@@ -273,7 +302,7 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 				simulateRst.MaxWinPct = winPct
 			}
 			//simulateRst.WinStockCodes += baseInfos[0].TsCode
-		} else {
+		} else if lastDetail.TotalMny < InitMny {
 			simulateRst.LostNum += 1
 			winPct := (InitMny - lastDetail.TotalMny) / InitMny
 			if winPct > simulateRst.MaxLostPct {
@@ -281,6 +310,12 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			}
 			//simulateRst.LostStockCodes += baseInfos[0].TsCode
 		}
+		// 最后一次统计信息赋值
+		lastTotalMny := float64(lastDetail.HoldNum)*baseInfos[len(baseInfos)-1].Close + lastDetail.LeftMny
+		lastWinPct := lastTotalMny / InitMny
+		statisticInfo.FinalTotalMny = lastTotalMny
+		statisticInfo.FinalWinPct = lastWinPct
+		simulateRst.DetailInfo = append(simulateRst.DetailInfo, statisticInfo)
 
 		// 将实时分析结果写入到Excel文件当中去
 		fileName := tsCode + ".xlsx"
@@ -311,5 +346,20 @@ func addDeltaInfo(lastDetail *simulation.OperationDetail, baseInfo *results.Stoc
 	detail.TotalMny = detail.HoldMny + detail.LeftMny
 	if deltaPct >= DisplayDeltaPct {
 		detail.AddDetailToExcelData(excelData)
+	}
+}
+
+func updateStatisticInfo(lastDetail *simulation.OperationDetail, baseInfo *results.StockBaseInfo, statisticInfo *simulation.SingleStockSimulateRst) {
+	// 计算下当日的总金额
+	totalMny := float64(lastDetail.HoldNum)*baseInfo.Close + lastDetail.LeftMny
+	winPct := totalMny / InitMny
+	if totalMny > statisticInfo.HighestMny {
+		statisticInfo.HighestMny = totalMny
+		statisticInfo.HighestPct = winPct
+		statisticInfo.HighestDay = baseInfo.TradeDate
+	} else if statisticInfo.LowestMny > totalMny {
+		statisticInfo.LowestMny = totalMny
+		statisticInfo.LowestPct = winPct
+		statisticInfo.LowestDay = baseInfo.TradeDate
 	}
 }

@@ -6,14 +6,14 @@ import (
 )
 
 const (
-	UpCount = 2    // 连续上涨天数
-	UpPct   = 0.06 // 连续上涨百分比
+	UpHighCount = 10  // 连续上涨天数
+	UpHighPct   = 0.2 // 连续上涨百分比
 )
 
-// 判定是否持续性上涨，对于持续性上涨的做买入操作
-// 持续性上涨的判定条件很简单：1.UpCount天之内连续上涨；2.上涨幅度达到了
+// 判定是否开启上涨模式，对于开启上涨的做买入操作
+// 持续性上涨的判定条件很简单：1.在UpHighCount天之内上涨了UpHighPct的百分比
 // 卖出操作
-func UpSignalSimulate(baseInfos []results.StockBaseInfo) []simulation.OperateInfo {
+func UpHighSimulate(baseInfos []results.StockBaseInfo) []simulation.OperateInfo {
 	if baseInfos == nil || len(baseInfos) == 0 {
 		return nil
 	}
@@ -21,7 +21,7 @@ func UpSignalSimulate(baseInfos []results.StockBaseInfo) []simulation.OperateInf
 
 	// 判定是否上涨
 	for i, _ := range baseInfos {
-		if i < UpCount {
+		if i < UpHighCount {
 			tempOpeInfo := simulation.OperateInfo{}
 			tempOpeInfo.OpeFlag = simulation.Nothing
 			tempOpeInfo.OpePercent = 0
@@ -30,17 +30,10 @@ func UpSignalSimulate(baseInfos []results.StockBaseInfo) []simulation.OperateInf
 		}
 
 		// 前UpCount天的股票走势
-		continueUp := true
-		firstClose := baseInfos[i-UpCount].Close
+		firstClose := baseInfos[i-UpHighCount].Close
 		lastClose := baseInfos[i].Close
-		for j := 0; j < UpCount; j++ {
-			if !continueUp {
-				break
-			}
-			continueUp = continueUp && baseInfos[i-j].PctChg > 0
-		}
 		tempUpPct := (lastClose - firstClose) / firstClose
-		if continueUp && tempUpPct >= UpPct {
+		if tempUpPct >= UpHighPct {
 			tempOpeInfo := simulation.OperateInfo{}
 			tempOpeInfo.OpeFlag = simulation.BuyFlag
 			tempOpeInfo.OpePercent = 0.5
