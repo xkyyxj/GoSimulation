@@ -3,7 +3,7 @@ package main
 import (
 	_ "database/sql"
 	"stock_simulate/datacenter"
-	"stock_simulate/speSImulate"
+	"stock_simulate/findTarget"
 )
 
 var SingleDataCenter *datacenter.DataCenter
@@ -45,8 +45,10 @@ func main() {
 	//trackSimulate.Simulate("long_long_time_0000006")
 
 	//simulation.Simulate("history_down_simulate_006")
-	speSImulate.Simulate("tian_high_0010")
+	//speSImulate.Simulate("tian_0008")
 	//allSimulate.UpGoSimualte()
+	findTarget.FindTarget("target_dir")
+
 }
 
 func testArray(array1 [2]int) {

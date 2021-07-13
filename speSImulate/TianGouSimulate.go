@@ -36,6 +36,7 @@ func Simulate(dirName string) {
 	dataCenter := datacenter.GetInstance()
 	var currIndex int
 	currIndex = 0
+	//  ts_code='603066.SH'
 	stockList := dataCenter.QueryStockCodes("")
 	channelSlice := make([]<-chan simulation.SimulateRst, DefaultThreadNum)
 	var waitGroup sync.WaitGroup
@@ -138,13 +139,14 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 		//retOpeTime := EMAJudgeBuyTime(baseInfos)
 		//retOpeTime := HistoryDownJudge(baseInfos)
 		//retOpeTime := simulation.LongEmaSimulate(baseInfos)
-		//retOpeTime := UpSignalSimulate(baseInfos)
-		retOpeTime := UpHighSimulate(baseInfos)
+		retOpeTime := UpSignalSimulate(baseInfos)
+		//retOpeTime := UpHighSimulate(baseInfos)
 		// 开始做分析
 		//lostCount := 0		// 失利次数
 		var lastDetail simulation.OperationDetail
 		lastDetail.LeftMny = InitMny
 		lastDetail.TotalMny = InitMny
+		hasBuy := false
 		for i, info := range retOpeTime {
 			// 每次开始之前需要检查一下是不是达到了最大回撤的百分比
 			tempHoldMny := float64(holdInfos.HoldNum) * baseInfos[i].Close
@@ -205,6 +207,7 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 					}
 				}
 				lastDetail = tempDetail
+				hasBuy = true
 			}
 
 			// ---------------------------- 下面是卖出操作 ----------------------------------------------------------------
@@ -271,7 +274,9 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			if realOpeNum == 0 {
 				addDeltaInfo(&lastDetail, &baseInfos[i], &excelData)
 				// 统计信息计算
-				updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
+				if hasBuy {
+					updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
+				}
 				continue
 			}
 			// 更新持仓信息
@@ -293,7 +298,9 @@ func singleSimulate(index *int, stockList []string, channel chan simulation.Simu
 			lastDetail = soldDetail
 
 			// 统计信息计算
-			updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
+			if hasBuy {
+				updateStatisticInfo(&lastDetail, &baseInfos[i], &statisticInfo)
+			}
 		}
 		if lastDetail.TotalMny > InitMny {
 			simulateRst.WinNum += 1

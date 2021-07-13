@@ -13,8 +13,8 @@ var instance *DataCenter
 var once sync.Once
 
 func GetInstance() *DataCenter {
-	once.Do(func(){
-		instance=&DataCenter{}
+	once.Do(func() {
+		instance = &DataCenter{}
 		instance.Initialize()
 	})
 	return instance
@@ -26,7 +26,7 @@ type DataCenter struct {
 
 func (dataCenter *DataCenter) Initialize() {
 	// 此处默认写死了
-	db, err := sqlx.Open("mysql","root:123@tcp(localhost:3306)/stock?charset=utf8")
+	db, err := sqlx.Open("mysql", "root:123@tcp(localhost:3306)/stock?charset=utf8")
 	if err != nil {
 		panic("数据库连接失败，请检查数据库！")
 	}
@@ -58,4 +58,26 @@ func (dataCenter *DataCenter) QueryStockBaseInfo(wherePart string) []results.Sto
 	}
 	_ = dataCenter.Db.Select(&infos, sql)
 	return infos
+}
+
+// 通用查询之一：查询所有的基本信息，附带复权后价格
+func (dataCenter *DataCenter) QueryStockBaseInfoWithAfterPort(wherePart string) []results.StockBaseInfo {
+	stockInfos := dataCenter.QueryStockBaseInfo(wherePart)
+	beginDate := stockInfos[len(stockInfos)-1].TradeDate
+	sql := "select * from adj_factor where ts_code='" + stockInfos[0].TsCode + "' and trade_date >= '" + beginDate + "' order by trade_date desc"
+	var adjFactorInfos []results.AdjFactorStruct
+	_ = dataCenter.Db.Select(&adjFactorInfos, sql)
+	stockInfoIndex := 0
+	for _, adjFactor := range adjFactorInfos {
+		if adjFactor.TradeDate != stockInfos[stockInfoIndex].TradeDate {
+			continue
+		}
+		// 进行复权计算
+		stockInfos[stockInfoIndex].AfterClose = stockInfos[stockInfoIndex].Close * adjFactor.AdjFactor
+		stockInfos[stockInfoIndex].AfterOpen = stockInfos[stockInfoIndex].Open * adjFactor.AdjFactor
+		stockInfos[stockInfoIndex].AfterHigh = stockInfos[stockInfoIndex].High * adjFactor.AdjFactor
+		stockInfos[stockInfoIndex].AfterLow = stockInfos[stockInfoIndex].Low * adjFactor.AdjFactor
+		stockInfoIndex = stockInfoIndex + 1
+	}
+	return stockInfos
 }
